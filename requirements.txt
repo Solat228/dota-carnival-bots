@@ -1,8 +1,13 @@
 # Python 3.9+, Windows.
-# Tesseract-OCR берётся из ARK-бота или из config.json -> "tesseract".
+# Tesseract-OCR ставится отдельно (сборка UB Mannheim). Путь ищется сам либо
+# задаётся ключом "tesseract" в config.json / переменной TESSERACT_EXE.
+
 opencv-python
 numpy
 pytesseract
 pywin32
 pillow
-pytest
+
+# --- необязательное
+mss        # быстрый захват для grab.py; без него берётся pillow
+pytest     # нужен только для прогона тестов

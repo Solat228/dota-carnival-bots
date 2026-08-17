@@ -137,7 +137,10 @@ def test_ocr_build_config_has_whitelist_and_psm():
 
 
 def _tesseract_ready():
-    exe = config.find_tesseract('')
+    #Путь ищем ТАК ЖЕ, как бот: сперва из config.json (там машинный путь,
+    #файл не в репозитории), потом стандартные места. Иначе OCR-тесты молча
+    #уходили в пропуск на машине, где tesseract лежит нестандартно.
+    exe = config.find_tesseract(config.load().get('tesseract', ''))
     return os.path.exists(exe)
 
 

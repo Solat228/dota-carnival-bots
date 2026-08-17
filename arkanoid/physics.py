@@ -154,7 +154,12 @@ class BallTracker:
         px, py = self._pair_speed(self.samples[-3], self.samples[-2])
         if px is None:
             return vx, vy
-        if (px * vx) <= 0 or (py * vy) <= 0:        #отскок — берём свежую пару
+        #Отскок = смена ЗНАКА. Строго вертикальный полёт (vx == 0) сменой знака
+        #не является: сравнение «<= 0» считало его отскоком на каждом кадре и
+        #навсегда отключало сглаживание.
+        if (px < 0) != (vx < 0) and px != 0 and vx != 0:
+            return vx, vy
+        if (py < 0) != (vy < 0) and py != 0 and vy != 0:
             return vx, vy
         if abs(vx - px) > 0.6 * max(abs(vx), abs(px), 1.0):
             return vx, vy

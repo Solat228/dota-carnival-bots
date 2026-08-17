@@ -110,7 +110,8 @@ def find_ball(prev_bgr, cur_bgr, field, paddle_top=None, expect_pos=None):
         return None
     fl, top, fr, bottom = field
     left, right = fl + BALL_WALL_INSET, fr - BALL_WALL_INSET
-    low = int(paddle_top) if paddle_top else bottom
+    #`if paddle_top` считало 0 за «платформы нет» и открывало поиск на всё поле
+    low = int(paddle_top) if paddle_top is not None else bottom
     if low - top < 20 or right - left < 40:
         return None
     a = cv2.cvtColor(prev_bgr[top:low, left:right], cv2.COLOR_BGR2GRAY)

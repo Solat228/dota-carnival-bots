@@ -23,7 +23,8 @@ FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fixtures')
 
 
 def _tesseract_ready():
-    exe = config.find_tesseract('')
+    #Как и бот: сначала путь из config.json (машинный, вне репозитория).
+    exe = config.find_tesseract(config.load().get('tesseract', ''))
     return bool(exe) and os.path.exists(exe)
 
 

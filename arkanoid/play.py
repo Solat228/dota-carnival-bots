@@ -43,13 +43,39 @@ class Brain:
         self.last_ball_seen = -99.0
         self.last_state = ''
         self.state_since = 0.0
+        self.pending_state = ''
+        self.pending_since = 0.0
+        self.flicker_grace = 0.35       # столько новое состояние должно продержаться
+        self.last_f9 = -99.0
+        self.f9_retry = 3.0             # снимать паузу пробуем повторно, а не раз
         self.target = None
 
     # --- вспомогательное ----------------------------------------------------
     def _note_state(self, t, state):
-        if state != self.last_state:
+        """Запоминает состояние, но с гистерезисом.
+
+        Экраны мигают: на переходе уровня и на затухании `screen_state` скачет
+        dim<->other по нескольку раз в секунду. Если сбрасывать таймер на каждый
+        скачок, ни один фолбэк («экран не уходит -> клик») никогда не наступит,
+        и бот вечно жмёт F9, сам себе включая и выключая паузу. Поэтому смену
+        засчитываем, только если новое состояние продержалось `flicker_grace`.
+        """
+        if state == self.last_state:
+            self.pending_state = ''
+            return
+        if not self.last_state:             #самый первый кадр — принимаем сразу
+            self.last_state, self.state_since = state, t
+            return
+        if state != self.pending_state:
+            self.pending_state = state
+            self.pending_since = t
+            return
+        if (t - self.pending_since) >= self.flicker_grace:
             self.last_state = state
-            self.state_since = t
+            #Состояние началось, когда его УВИДЕЛИ ВПЕРВЫЕ, а не когда
+            #подтвердили: иначе подтверждение сдвигает все таймеры вперёд.
+            self.state_since = self.pending_since
+            self.pending_state = ''
 
     def _can_press(self, t):
         return (t - self.last_press) >= self.press_gap
@@ -82,9 +108,19 @@ class Brain:
         if again and self._can_press(t):
             self._press(t)
             return _act(click=again, note='конец игры -> сыграть ещё')
-        if (t - self.state_since) < 1.5:
+        #Кнопка «Играть» на затемнённом экране тоже годится: раньше эта ветка
+        #её игнорировала и вслепую кликала запасную точку «сыграть ещё».
+        play_btn = (buttons or {}).get('play')
+        if play_btn and self._can_press(t):
+            self._press(t)
+            return _act(click=play_btn, note='затемнение -> играть')
+        #F9 пробуем ПОВТОРНО, а не только первые полторы секунды: пауза от
+        #потери фокуса снимается только им, и если момент упущен, бот раньше
+        #навсегда оставался кликать мимо.
+        if (t - self.state_since) < 1.5 or (t - self.last_f9) > self.f9_retry:
             if self._can_press(t):
                 self._press(t)
+                self.last_f9 = t
                 return _act(f9=True, note='пауза -> F9')
             return _act(note='ждём выхода из паузы')
         spot = self.fallbacks.get('again')

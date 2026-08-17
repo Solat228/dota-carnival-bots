@@ -8,14 +8,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(HERE, 'config.json')
 
 #Где искать tesseract.exe. Порядок: рядом с проектом -> стандартные места ->
-#путь ARK-бота (там он уже лежал на машине автора) -> PATH.
+#переменная окружения TESSERACT_EXE -> PATH. Свой нестандартный путь можно
+#не править в коде: пропиши "tesseract" в config.json или задай TESSERACT_EXE.
 TESS_CANDIDATES = [
     os.path.join(HERE, 'Tesseract-OCR', 'tesseract.exe'),
     r'C:\Program Files\Tesseract-OCR\tesseract.exe',
     r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
     os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs', 'Tesseract-OCR',
                  'tesseract.exe'),
-    r'I:\!Backup\!Projects\!ARKBot\LogsRebroadcastASCENDED\Tesseract-OCR\tesseract.exe',
+    os.environ.get('TESSERACT_EXE', ''),
 ]
 
 DEFAULTS = {
@@ -62,6 +63,23 @@ def find_tesseract(path=''):
         if candidate and os.path.exists(candidate):
             return candidate
     return 'tesseract'  # надежда на PATH
+
+
+def load_raw(path=None):
+    """Только то, что реально лежит в файле, без подмешивания дефолтов.
+
+    Нужно арканоиду: у него свои дефолты, и `load()` подсовывал бы ему чужие
+    (например loop_fps печаталки), делая вид, что их задал пользователь.
+    """
+    try:
+        with open(path or CONFIG_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception as err:
+        print(f'[config] битый конфиг ({err}) — читаю как пустой')
+        return {}
 
 
 def load(path=CONFIG_PATH):

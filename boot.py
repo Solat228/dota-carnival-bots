@@ -36,6 +36,9 @@ DEFAULTS = {
     'focus_click': [0.5, 0.72],  # доля поля: пустое место под блоками
     'hotkey_toggle': 0x79,
     'hotkey_quit': 0x7B,
+    #Читался через .get с запасным значением, но в дефолтах его не было —
+    #в config.json ключ выглядел неподдерживаемым. Теперь он тут явно.
+    'window_title': 'Dota 2',
 }
 
 
@@ -229,6 +232,7 @@ class Bot:
         self.ball_areas = []
         self.last_ball_seen_pos = None
         self.last_ball_time = 0.0
+        self.no_frame_since = 0.0
         self.seen_ball = 0          # кадров с найденным мячом
         self.seen_frames = 0        # кадров в игре (для процента видимости)
         self.dim_since = 0.0
@@ -339,7 +343,19 @@ class Bot:
     def tick(self, t):
         img = self._grab()
         if img is None:
+            #Кадры могли ПЕРЕСТАТЬ приходить совсем (смена разрешения, блокировка
+            #экрана, сбой BitBlt). Тогда мы выходим отсюда до apply() — а значит
+            #последняя команда «держать A/D» останется висеть: клавиша зажата на
+            #уровне системы, и это ломает ввод во всём Windows, не только в игре.
+            if not self.no_frame_since:
+                self.no_frame_since = t
+            elif (t - self.no_frame_since) > 2.0:
+                self.no_frame_since = t
+                self.keys.release_all()
+                self.region = None          #заставит переискать панель
+                print('[бот] кадры не приходят 2 с — отпускаю клавиши, ищу панель')
             return None
+        self.no_frame_since = 0.0
         #Границы поля НЕЛЬЗЯ считать один раз: на экране правил синяя маска
         #даёт другую рамку, и с ней полоса поиска не достаёт до тележки
         #(живой прогон: поле 153..851 вместо 171..950, платформа «застыла»).
@@ -390,8 +406,12 @@ class Bot:
             self.dim_since = 0.0
         buttons = {}
         if state != 'play':
-            for key, tpl in self.templates.items():
-                got = vision.find_button(img, tpl)
+            #Только кнопки. Шаблон подсказки сюда не нужен — это лишние ~6 мс
+            #matchTemplate на каждом неигровом кадре и ключ, который никто не
+            #читает.
+            for key in ('play', 'again'):
+                tpl = self.templates.get(key)
+                got = vision.find_button(img, tpl) if tpl is not None else None
                 if got:
                     buttons[key] = got
         act = self.brain.step(t, state, self.field, paddle, ball, buttons, hint,
@@ -465,7 +485,7 @@ class Bot:
 
     # --- цикл ---------------------------------------------------------------
     def run(self, active=False):
-        period = 1.0 / max(1.0, float(self.cfg.get('loop_fps', 45)))
+        period = 1.0 / max(1.0, float(self.cfg.get('loop_fps', DEFAULTS['loop_fps'])))
         toggle = int(self.cfg.get('hotkey_toggle', 0x79))
         quit_key = int(self.cfg.get('hotkey_quit', 0x7B))
         keys = sendkeys.Hotkeys()
@@ -476,6 +496,21 @@ class Bot:
         if active:
             self.focus_click()
         started = time.time()
+        try:
+            self._loop(keys, toggle, quit_key, period, active)
+        finally:
+            #Клавиша движения зажимается физически (SendInput). Любой выход из
+            #цикла — Ctrl+C, исключение, закрытие консоли — обязан её отпустить,
+            #иначе A или D останется нажатой во всей системе.
+            self.keys.release_all()
+            self.frames.stop()
+            self.hud_worker.stop()
+        avg = sum(self.times) / len(self.times) if self.times else 0
+        print(f'[бот] итог: лучший уровень {self.best_level}, '
+              f'лучший счёт {self.best_score}, потерь {self.misses}, '
+              f'кадр {avg:.0f} мс, время {time.time() - started:.0f} с')
+
+    def _loop(self, keys, toggle, quit_key, period, active):
         while True:
             t0 = time.time()
             if keys.pressed(toggle):
@@ -505,13 +540,6 @@ class Bot:
             if len(self.times) > 400:
                 self.times = self.times[-400:]
             time.sleep(max(0.0, period - (time.time() - t0)))
-        self.keys.release_all()
-        self.frames.stop()
-        self.hud_worker.stop()
-        avg = sum(self.times) / len(self.times) if self.times else 0
-        print(f'[бот] итог: лучший уровень {self.best_level}, '
-              f'счёт {self.best_score}, кадр {avg:.0f} мс, '
-              f'время {time.time() - started:.0f} с')
 
 
 def place_console(panel_rect=None, margin=45):
@@ -579,8 +607,21 @@ class Tee:
 
 
 def load_cfg():
+    """Настройки арканоида: дефолты -> общие ключи config.json -> секция arkanoid.
+
+    Раньше бралась ТОЛЬКО секция `"arkanoid"`, и ключ, положенный в корень
+    config.json (как их описывает README), молча не работал.
+    """
     cfg = dict(DEFAULTS)
-    cfg.update(config.load().get('arkanoid', {}) if hasattr(config, 'load') else {})
+    try:
+        data = config.load_raw()        #ТОЛЬКО файл, без дефолтов печаталки:
+    except Exception:                   #иначе её loop_fps=25 забивал наши 120
+        return cfg
+    for key in DEFAULTS:
+        if key in data:
+            cfg[key] = data[key]
+    if isinstance(data.get('arkanoid'), dict):
+        cfg.update(data['arkanoid'])        #секция важнее общего ключа
     return cfg
 
 

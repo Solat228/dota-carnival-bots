@@ -129,12 +129,27 @@ def test_menu_without_buttons_waits_then_presses_space():
     assert later.space is True
 
 
-def test_state_change_resets_timer():
+def test_short_blink_does_not_reset_timer():
+    """Один кадр другого состояния — мигание, а не смена экрана.
+
+    Раньше таймер сбрасывался на любой скачок: на мигающем переходе уровня бот
+    вечно жал F9 и ни разу не доходил до запасного клика.
+    """
     b = brain(press_gap=0.0)
     b.step(0.0, 'other', FIELD, PADDLE, None)
     b.step(5.0, 'play', FIELD, PADDLE, (400.0, 300.0))
     act = b.step(5.1, 'other', FIELD, PADDLE, None)
-    assert not act.space                       #таймер экрана пошёл заново
+    assert act.space                           #таймер меню не обнулился
+
+
+def test_sustained_state_change_resets_timer():
+    """Устойчивая смена экрана таймер обнуляет."""
+    b = brain(press_gap=0.0)
+    b.step(0.0, 'other', FIELD, PADDLE, None)
+    for t in (5.0, 5.4, 5.8):                  #держится дольше гистерезиса
+        b.step(t, 'play', FIELD, PADDLE, (400.0, 300.0))
+    act = b.step(6.0, 'other', FIELD, PADDLE, None)
+    assert not act.space
 
 
 def test_dim_falls_back_to_click_when_stuck():
@@ -143,7 +158,10 @@ def test_dim_falls_back_to_click_when_stuck():
               fallback_after=3.0)
     b.step(0.0, 'dim', FIELD, PADDLE, None)
     assert b.step(2.0, 'dim', FIELD, PADDLE, None).click is None
-    act = b.step(4.0, 'dim', FIELD, PADDLE, None)
+    #На 4.0 подходит очередь повторного F9 (он пробуется раз в 3 с),
+    #запасной клик приходит следующим шагом.
+    b.step(4.0, 'dim', FIELD, PADDLE, None)
+    act = b.step(4.5, 'dim', FIELD, PADDLE, None)
     assert act.click == (480.0, 774.0)
 
 

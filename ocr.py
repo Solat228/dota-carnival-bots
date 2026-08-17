@@ -10,8 +10,18 @@ _READY = False
 
 
 def setup(path=''):
-    """Прописывает путь к tesseract.exe (один раз за процесс)."""
+    """Прописывает путь к tesseract.exe (один раз за процесс).
+
+    Путь без аргумента берём из config.json — там машинный путь, который не
+    лежит в репозитории. Иначе на машине с нестандартной установкой OCR молча
+    получал несуществующий 'tesseract' из PATH и возвращал пустые строки.
+    """
     global _READY
+    if not path:
+        try:
+            path = config.load().get('tesseract', '')
+        except Exception:
+            path = ''
     exe = config.find_tesseract(path)
     pytesseract.pytesseract.tesseract_cmd = exe
     _READY = True
