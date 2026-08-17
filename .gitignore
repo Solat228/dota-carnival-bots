@@ -1,0 +1,20 @@
+# --- личное: снимки экрана могут содержать что угодно, вплоть до рабочей почты
+Screens/
+ScreensBoot/
+Debug/
+*.log
+*.err
+*.pid
+
+# --- настройки и данные конкретной машины
+config.json
+learned_words.json
+Tesseract-OCR/
+
+# --- питон
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.tmp

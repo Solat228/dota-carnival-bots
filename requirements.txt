@@ -1,0 +1,8 @@
+# Python 3.9+, Windows.
+# Tesseract-OCR берётся из ARK-бота или из config.json -> "tesseract".
+opencv-python
+numpy
+pytesseract
+pywin32
+pillow
+pytest
